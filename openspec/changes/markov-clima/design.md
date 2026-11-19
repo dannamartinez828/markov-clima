@@ -17,7 +17,7 @@ El repositorio no tiene implementación preexistente. La motivación y el alcanc
 
 ## Decisions
 
-1. **Módulos ECMAScript `.mjs` sin paquete ni build.** Colocar el modelo y la validación en módulos puros importables desde los tests de Node y desde un `<script type="module">` del HTML. Se elige `.mjs` para que Node use módulos ECMAScript sin necesitar un `package.json` ni cambiar la interpretación de otros archivos. Frente a duplicar cálculos dentro de un script clásico, esta opción evita que la lógica de tests difiera de la lógica del navegador. La página deberá servirse desde un servidor HTTP estático local para que el navegador permita importar módulos.
+1. **Un módulo JavaScript puro compatible con CommonJS y el navegador.** Implementar las funciones de Markov en `markov.js` con una envoltura UMD sencilla: Node las obtiene mediante `module.exports` y el navegador mediante un objeto global. La página puede cargarlo como un script clásico y los tests pueden importarlo con `require`, sin transpilar, duplicar la lógica ni requerir módulos ES.
 
 2. **Cálculo mediante multiplicación repetida.** Crear el vector unitario del estado inicial y aplicar la matriz de transición repetidamente hasta el mayor horizonte; guardar las distribuciones en los pasos 1, 3, 5 y 10. Esto es matemáticamente equivalente a multiplicar el vector por la matriz elevada a cada exponente requerido, evita implementar una operación general de exponenciación de matrices que no aporta valor para estos cuatro horizontes y reduce errores de orden. Los datos se mantienen como probabilidades entre 0 y 1.
 
@@ -25,14 +25,14 @@ El repositorio no tiene implementación preexistente. La motivación y el alcanc
 
 4. **Chart.js desde CDN y actualización coordinada de vistas.** El HTML carga Chart.js desde CDN y presenta la tabla junto con un gráfico de barras agrupadas: categorías de horizonte en el eje horizontal y una serie por estado. Al cambiar el estado inicial, recalcular una sola vez, actualizar la tabla y actualizar la instancia existente del gráfico para que ambas vistas correspondan al mismo pronóstico. Frente a generar un gráfico por selección, reutilizar la instancia evita duplicados y acumulación de recursos.
 
-5. **Pruebas con `node:test` y sin dependencias de prueba.** Usar archivos de prueba `.test.mjs` para validar la matriz y los resultados de todos los estados y horizontes. Node puede descubrirlos con `node --test` y no se necesita instalar un runner ni emular el navegador. La integración visual se comprueba en el navegador; los módulos de cálculo permanecen aislados del DOM para que sus pruebas sean deterministas.
+5. **Pruebas con `node:test` y sin dependencias de prueba.** Usar `test/markov.test.js` para validar la matriz y los resultados de todos los estados y horizontes. El `package.json` solo declara el script `test` que ejecuta `node --test`; no añade dependencias. La integración visual se comprueba en el navegador y `markov.js` permanece aislado del DOM para que sus pruebas sean deterministas.
 
 ## Risks / Trade-offs
 
 - [La CDN de Chart.js puede no estar disponible] → La aplicación no tendrá una gráfica sin conexión; mantener la lógica y los resultados tabulares independientes de Chart.js y mostrar un mensaje visible si el gráfico no se puede inicializar.
-- [Los módulos ES no funcionan de forma fiable al abrir el HTML directamente con `file://`] → Ejecutar la página mediante un servidor HTTP estático local; esto no requiere compilar ni empaquetar el proyecto.
+- [Chart.js requiere conectividad al CDN] → Mantener el cálculo y la tabla independientes de la gráfica y presentar un mensaje visible si la biblioteca no está disponible.
 - [El redondeo de punto flotante puede hacer que las sumas difieran mínimamente de 1] → Aplicar la tolerancia especificada al validar filas y conservar los valores sin redondear para los cálculos.
 
 ## Migration Plan
 
-No hay datos ni aplicación existentes que migrar. Servir el HTML estático desde un servidor HTTP y ejecutar `node --test`; no se requiere despliegue de backend ni hay una migración que revertir.
+No hay datos ni aplicación existentes que migrar. Abrir la página estática y ejecutar `npm test` (o `node --test`); no se requiere despliegue de backend ni hay una migración que revertir.

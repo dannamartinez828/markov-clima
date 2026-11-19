@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Pronóstico del clima con cadenas de Markov</title>
+    <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+    <script defer src="markov.js"></script>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: system-ui, sans-serif;
+        color: #172033;
+        background: #f3f6fb;
+      }
+
+      body {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 2rem 1rem;
+      }
+
+      main {
+        padding: clamp(1.25rem, 4vw, 2.5rem);
+        background: #fff;
+        border: 1px solid #dce3ee;
+        border-radius: 1rem;
+        box-shadow: 0 0.5rem 1.5rem rgb(23 32 51 / 8%);
+      }
+
+      h1 {
+        margin-top: 0;
+        line-height: 1.2;
+      }
+
+      .controls {
+        margin: 1.5rem 0;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 0.5rem;
+        font-weight: 650;
+      }
+
+      select {
+        min-width: 12rem;
+        padding: 0.65rem 0.8rem;
+        border: 1px solid #98a7bc;
+        border-radius: 0.4rem;
+        font: inherit;
+      }
+
+      .results {
+        display: grid;
+        gap: 2rem;
+      }
+
+      .chart-container {
+        position: relative;
+        min-height: 280px;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        text-align: left;
+      }
+
+      caption {
+        margin-bottom: 0.75rem;
+        text-align: left;
+        font-size: 1.2rem;
+        font-weight: 650;
+      }
+
+      th,
+      td {
+        padding: 0.7rem 0.6rem;
+        border-bottom: 1px solid #dce3ee;
+      }
+
+      th {
+        background: #f3f6fb;
+      }
+
+      [role="alert"] {
+        color: #a11b1b;
+      }
+
+      @media (min-width: 720px) {
+        .results {
+          grid-template-columns: minmax(0, 1fr) minmax(300px, 1fr);
+          align-items: start;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Pronóstico del clima con cadenas de Markov</h1>
+      <p>Explora cómo cambia la probabilidad del clima según el estado inicial seleccionado.</p>
+
+      <div class="controls">
+        <label for="estado-inicial">Estado inicial</label>
+        <select id="estado-inicial" name="estado-inicial">
+          <option value="Soleado">Soleado</option>
+          <option value="Nublado">Nublado</option>
+          <option value="Lluvioso">Lluvioso</option>
+        </select>
+      </div>
+
+      <p id="mensaje-error" role="alert" hidden></p>
+      <div class="results">
+        <section aria-labelledby="grafica-titulo">
+          <h2 id="grafica-titulo">Probabilidades por paso</h2>
+          <div class="chart-container">
+            <canvas id="grafica-pronostico" aria-label="Gráfica de probabilidades por paso" role="img"></canvas>
+          </div>
+          <p id="mensaje-grafica" role="status" hidden></p>
+        </section>
+
+        <section aria-labelledby="tabla-titulo">
+          <table>
+            <caption id="tabla-titulo">Distribución de probabilidad</caption>
+            <thead>
+              <tr>
+                <th scope="col">Paso</th>
+                <th scope="col">Soleado</th>
+                <th scope="col">Nublado</th>
+                <th scope="col">Lluvioso</th>
+              </tr>
+            </thead>
+            <tbody id="resultados-tabla"></tbody>
+          </table>
+        </section>
+      </div>
+    </main>
+
+    <script>
+      document.addEventListener("DOMContentLoaded", () => {
+        const selector = document.getElementById("estado-inicial");
+        const cuerpoTabla = document.getElementById("resultados-tabla");
+        const mensajeError = document.getElementById("mensaje-error");
+        const mensajeGrafica = document.getElementById("mensaje-grafica");
+        const lienzoGrafica = document.getElementById("grafica-pronostico");
+        const formatoPorcentaje = new Intl.NumberFormat("es-ES", {
+          style: "percent",
+          maximumFractionDigits: 2,
+        });
+        let grafica = null;
+
+        function actualizarGrafica(resultados) {
+          if (typeof Chart === "undefined") {
+            mensajeGrafica.textContent = "La gráfica no está disponible. Verifica tu conexión a Internet.";
+            mensajeGrafica.hidden = false;
+            return;
+          }
+
+          mensajeGrafica.hidden = true;
+          const datos = {
+            labels: resultados.map(({ paso }) => String(paso)),
+            datasets: MarkovClima.estados.map((estado, indice) => ({
+              label: estado,
+              data: resultados.map(({ probabilidades }) => probabilidades[indice]),
+              backgroundColor: ["#f4b942", "#718096", "#4285d4"][indice],
+            })),
+          };
+
+          if (grafica === null) {
+            grafica = new Chart(lienzoGrafica, {
+              type: "bar",
+              data: datos,
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: { position: "bottom" },
+                  tooltip: {
+                    callbacks: {
+                      label: (contexto) =>
+                        `${contexto.dataset.label}: ${formatoPorcentaje.format(contexto.parsed.y)}`,
+                    },
+                  },
+                },
+                scales: {
+                  x: { title: { display: true, text: "Paso" } },
+                  y: {
+                    beginAtZero: true,
+                    max: 1,
+                    title: { display: true, text: "Probabilidad" },
+                    ticks: {
+                      callback: (valor) => `${Math.round(Number(valor) * 100)}%`,
+                    },
+                  },
+                },
+              },
+            });
+            return;
+          }
+
+          grafica.data.labels = datos.labels;
+          grafica.data.datasets.forEach((dataset, indice) => {
+            dataset.data = datos.datasets[indice].data;
+          });
+          grafica.update();
+        }
+
+        function actualizarPronostico() {
+          cuerpoTabla.replaceChildren();
+          mensajeError.hidden = true;
+
+          try {
+            const resultados = MarkovClima.distribucionEnPasos(selector.value);
+            resultados.forEach(({ paso, probabilidades }) => {
+              const fila = document.createElement("tr");
+              const celdaPaso = document.createElement("th");
+              celdaPaso.scope = "row";
+              celdaPaso.textContent = String(paso);
+              fila.append(celdaPaso);
+
+              probabilidades.forEach((probabilidad) => {
+                const celda = document.createElement("td");
+                celda.textContent = formatoPorcentaje.format(probabilidad);
+                fila.append(celda);
+              });
+
+              cuerpoTabla.append(fila);
+            });
+            actualizarGrafica(resultados);
+          } catch (error) {
+            if (!(error instanceof TypeError || error instanceof RangeError)) {
+              throw error;
+            }
+            mensajeError.textContent = `No se pudo calcular el pronóstico: ${error.message}`;
+            mensajeError.hidden = false;
+            if (grafica !== null) {
+              grafica.data.labels = [];
+              grafica.data.datasets.forEach((dataset) => {
+                dataset.data = [];
+              });
+              grafica.update();
+            }
+          }
+        }
+
+        selector.addEventListener("change", actualizarPronostico);
+        actualizarPronostico();
+      });
+    </script>
+  </body>
+</html>
